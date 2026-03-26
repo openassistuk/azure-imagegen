@@ -1,6 +1,7 @@
 # Azure ImageGen Skill
 
-This repository contains a distributable Codex skill at [skills/azure-imagegen](./skills/azure-imagegen) for Azure OpenAI image generation and editing. It is intentionally separate from any live skill installation under `~/.codex/skills` or `.agents/skills`.
+This repository contains a distributable Codex skill at [skills/azure-imagegen](./skills/azure-imagegen) for Azure OpenAI image generation and editing.
+The installable unit is the [`skills/azure-imagegen`](./skills/azure-imagegen) folder, not the repo root.
 
 ## What it includes
 
@@ -16,7 +17,53 @@ This repository contains a distributable Codex skill at [skills/azure-imagegen](
 - full workflow coverage for `generate`, `edit`, and `generate-batch`
 - API key or Entra ID auth
 
-## Prerequisites
+## Install the skill
+
+1. Clone this repository:
+
+```bash
+git clone https://github.com/openassistuk/azure-imagegen.git
+cd azure-imagegen
+```
+
+2. Copy `skills/azure-imagegen` into one of your Codex skill locations:
+
+- global install: `~/.codex/skills/azure-imagegen`
+- project-local install: `.agents/skills/azure-imagegen` inside the repo where you want Codex to use it
+
+3. Install the Python dependencies in the environment that will run the bundled CLI:
+
+```bash
+python -m pip install openai pillow
+```
+
+Optional for live Entra-authenticated runs:
+
+```bash
+python -m pip install azure-identity
+```
+
+This repo does not install the skill automatically. Copy the skill folder into place yourself.
+
+## Install examples
+
+PowerShell global install:
+
+```powershell
+git clone https://github.com/openassistuk/azure-imagegen.git
+New-Item -ItemType Directory -Force "$HOME\.codex\skills" | Out-Null
+Copy-Item -Recurse .\azure-imagegen\skills\azure-imagegen "$HOME\.codex\skills\azure-imagegen"
+```
+
+Bash global install:
+
+```bash
+git clone https://github.com/openassistuk/azure-imagegen.git
+mkdir -p ~/.codex/skills
+cp -R azure-imagegen/skills/azure-imagegen ~/.codex/skills/azure-imagegen
+```
+
+## CLI prerequisites
 
 Required Python packages:
 
@@ -50,7 +97,7 @@ AZURE_OPENAI_DEPLOYMENT
 AZURE_OPENAI_API_KEY
 ```
 
-## Quick start
+## Quick start from this repo
 
 From the repo root:
 
@@ -83,14 +130,7 @@ python $IMAGE_GEN generate `
 
 If you want ephemeral dependency installs instead, the same live commands also work with `uv run --with openai --with pillow` and `uv run --with openai --with pillow --with azure-identity`.
 
-## Install into a live Codex environment later
-
-Copy `skills/azure-imagegen` into one of the locations your Codex setup uses for skills, such as:
-
-- `~/.codex/skills/azure-imagegen`
-- `.agents/skills/azure-imagegen` in a target repo
-
-This repo does not install the skill automatically.
+If you install the skill into Codex, the same bundled CLI lives at `skills/azure-imagegen/scripts/image_gen.py` inside the installed skill folder.
 
 ## Layout
 
