@@ -84,7 +84,7 @@ The CLI normalizes the root resource URL to `/openai/v1/`.
 
 ## Deployment guidance
 
-Pass the Azure deployment name, not the raw model id. The deployment should point at a compatible image model, typically `gpt-image-1.5`.
+Pass the Azure deployment name, not the raw model id. The deployment should point at a compatible Azure OpenAI image model deployment.
 
 ## Failure modes
 

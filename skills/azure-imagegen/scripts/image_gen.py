@@ -17,7 +17,6 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from io import BytesIO
 
-DEFAULT_RECOMMENDED_MODEL = "gpt-image-1.5"
 DEFAULT_SIZE = "1024x1024"
 DEFAULT_QUALITY = "high"
 DEFAULT_OUTPUT_FORMAT = "png"
@@ -144,12 +143,15 @@ def _build_output_paths(
     output_format: str,
     count: int,
     out_dir: Optional[str],
+    *,
+    create_dirs: bool = True,
 ) -> List[Path]:
     ext = "." + output_format
 
     if out_dir:
         out_base = Path(out_dir)
-        out_base.mkdir(parents=True, exist_ok=True)
+        if create_dirs:
+            out_base.mkdir(parents=True, exist_ok=True)
         return [out_base / f"image_{i}{ext}" for i in range(1, count + 1)]
 
     out_path = Path(out)
@@ -231,19 +233,6 @@ def _fields_from_args(args: argparse.Namespace) -> Dict[str, Optional[str]]:
 
 def _print_request(payload: dict) -> None:
     print(json.dumps(payload, indent=2, sort_keys=True))
-
-
-def _decode_and_write(images: List[str], outputs: List[Path], force: bool) -> None:
-    for idx, image_b64 in enumerate(images):
-        if idx >= len(outputs):
-            break
-        out_path = outputs[idx]
-        if out_path.exists() and not force:
-            _die(f"Output already exists: {out_path} (use --force to overwrite)")
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_bytes(base64.b64decode(image_b64))
-        print(f"Wrote {out_path}")
-
 
 def _derive_downscale_path(path: Path, suffix: str) -> Path:
     if suffix and not suffix.startswith("-") and not suffix.startswith("_"):
@@ -547,8 +536,10 @@ def _job_output_paths(
     prompt: str,
     n: int,
     explicit_out: Optional[str],
+    create_dir: bool = True,
 ) -> List[Path]:
-    out_dir.mkdir(parents=True, exist_ok=True)
+    if create_dir:
+        out_dir.mkdir(parents=True, exist_ok=True)
     ext = "." + output_format
 
     if explicit_out:
@@ -677,6 +668,7 @@ async def _run_generate_batch(args: argparse.Namespace, config: AzureRuntimeConf
                 prompt=prompt,
                 n=n,
                 explicit_out=job.get("out"),
+                create_dir=False,
             )
             downscaled = None
             if args.downscale_max_dim is not None:
@@ -727,6 +719,7 @@ async def _run_generate_batch(args: argparse.Namespace, config: AzureRuntimeConf
             prompt=prompt,
             n=n,
             explicit_out=job.get("out"),
+            create_dir=True,
         )
         try:
             async with sem:
@@ -797,7 +790,13 @@ def _generate(args: argparse.Namespace, config: AzureRuntimeConfig) -> None:
     _validate_transparency(args.background, output_format)
     if "output_format" in payload:
         payload["output_format"] = output_format
-    output_paths = _build_output_paths(args.out, output_format, args.n, args.out_dir)
+    output_paths = _build_output_paths(
+        args.out,
+        output_format,
+        args.n,
+        args.out_dir,
+        create_dirs=not args.dry_run,
+    )
 
     if args.dry_run:
         _print_request({"azure": _runtime_preview(config), "endpoint": "/images/generations", **payload})
@@ -856,7 +855,13 @@ def _edit(args: argparse.Namespace, config: AzureRuntimeConfig) -> None:
     _validate_transparency(args.background, output_format)
     if "output_format" in payload:
         payload["output_format"] = output_format
-    output_paths = _build_output_paths(args.out, output_format, args.n, args.out_dir)
+    output_paths = _build_output_paths(
+        args.out,
+        output_format,
+        args.n,
+        args.out_dir,
+        create_dirs=not args.dry_run,
+    )
 
     if args.dry_run:
         payload_preview = dict(payload)

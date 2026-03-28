@@ -1,95 +1,153 @@
-# Azure ImageGen Skill
+# Azure ImageGen Plugin
 
-This repository contains a distributable Codex skill at [skills/azure-imagegen](./skills/azure-imagegen) for Azure OpenAI image generation and editing.
-The installable unit is the [`skills/azure-imagegen`](./skills/azure-imagegen) folder, not the repo root.
+`azure-imagegen` is a Codex plugin that packages an Azure-first image generation skill plus a bundled Python CLI for Azure OpenAI v1 image workflows.
+
+The installable unit is the repository root. The existing skill at [`skills/azure-imagegen`](./skills/azure-imagegen) remains usable for direct skill installs during transition, but plugin installation is now the primary path.
 
 ## What it includes
 
-- a publishable skill folder with `SKILL.md`
-- `agents/openai.yaml` UI metadata
-- an Azure-aware CLI at `skills/azure-imagegen/scripts/image_gen.py`
-- reference docs for CLI usage, auth, prompting, sample prompts, and current limitations
+- plugin manifest at [`.codex-plugin/plugin.json`](./.codex-plugin/plugin.json)
+- Codex skill at [`skills/azure-imagegen`](./skills/azure-imagegen)
+- bundled CLI at [`skills/azure-imagegen/scripts/image_gen.py`](./skills/azure-imagegen/scripts/image_gen.py)
+- plugin UI assets under [`assets/`](./assets)
+- validation tests and CI smoke checks
 
 ## Scope
 
 - Azure OpenAI v1 only
-- Image API only in v1
-- full workflow coverage for `generate`, `edit`, and `generate-batch`
-- API key or Entra ID auth
+- Image API workflows only
+- `generate`, `edit`, and `generate-batch`
+- API key or Entra ID authentication
 
-## Install the skill
+## Install As A Plugin
 
-1. Clone this repository:
-
-```bash
-git clone https://github.com/openassistuk/azure-imagegen.git
-cd azure-imagegen
-```
-
-2. Copy `skills/azure-imagegen` into one of your Codex skill locations:
-
-- global install: `~/.codex/skills/azure-imagegen`
-- project-local install: `.agents/skills/azure-imagegen` inside the repo where you want Codex to use it
-
-3. Install the Python dependencies in the environment that will run the bundled CLI:
-
-```bash
-python -m pip install openai pillow
-```
-
-Optional for live Entra-authenticated runs:
-
-```bash
-python -m pip install azure-identity
-```
-
-This repo does not install the skill automatically. Copy the skill folder into place yourself.
-
-## Install examples
-
-PowerShell global install:
+Preferred home-local install:
 
 ```powershell
-git clone https://github.com/openassistuk/azure-imagegen.git
+git clone https://github.com/openassistuk/azure-imagegen.git "$HOME\plugins\azure-imagegen"
+```
+
+Preferred repo-local install inside a project that should use the plugin:
+
+```powershell
+git clone https://github.com/openassistuk/azure-imagegen.git ".\plugins\azure-imagegen"
+```
+
+This repository does not commit a marketplace catalog because it is a single plugin. Register it in your local marketplace instead.
+
+Home-local marketplace file: `~/.agents/plugins/marketplace.json`
+
+```json
+{
+  "name": "local-plugins",
+  "interface": {
+    "displayName": "Local Plugins"
+  },
+  "plugins": [
+    {
+      "name": "azure-imagegen",
+      "source": {
+        "source": "local",
+        "path": "./plugins/azure-imagegen"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
+```
+
+Repo-local marketplace file: `.agents/plugins/marketplace.json`
+
+```json
+{
+  "name": "project-plugins",
+  "interface": {
+    "displayName": "Project Plugins"
+  },
+  "plugins": [
+    {
+      "name": "azure-imagegen",
+      "source": {
+        "source": "local",
+        "path": "./plugins/azure-imagegen"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
+```
+
+After registration, Codex can discover the plugin and the bundled skill will still trigger as `$azure-imagegen`.
+
+## Legacy Skill-Only Install
+
+If you only want the skill and not the plugin packaging, copy [`skills/azure-imagegen`](./skills/azure-imagegen) into one of these locations:
+
+- `~/.codex/skills/azure-imagegen`
+- `.agents/skills/azure-imagegen`
+
+Example:
+
+```powershell
 New-Item -ItemType Directory -Force "$HOME\.codex\skills" | Out-Null
-Copy-Item -Recurse .\azure-imagegen\skills\azure-imagegen "$HOME\.codex\skills\azure-imagegen"
+Copy-Item -Recurse ".\skills\azure-imagegen" "$HOME\.codex\skills\azure-imagegen"
 ```
 
-Bash global install:
+## Dependency Setup
+
+Python 3.11 is the CI baseline.
+
+Install runtime dependencies from the plugin root:
 
 ```bash
-git clone https://github.com/openassistuk/azure-imagegen.git
-mkdir -p ~/.codex/skills
-cp -R azure-imagegen/skills/azure-imagegen ~/.codex/skills/azure-imagegen
+python -m pip install -e .
 ```
 
-## CLI prerequisites
-
-Required Python packages:
+Add optional Entra authentication support:
 
 ```bash
-python -m pip install openai pillow
+python -m pip install -e ".[entra]"
 ```
 
-If you prefer `uv`:
+Install development dependencies for validation and tests:
 
 ```bash
-uv pip install openai pillow
+python -m pip install -e ".[dev,entra]"
 ```
 
-Optional for live Entra-authenticated runs:
+If you use `uv`, the equivalent workflow is:
 
 ```bash
-python -m pip install azure-identity
+uv sync --extra dev --extra entra
 ```
 
-Or with `uv`:
+The runtime dependency set is:
 
-```bash
-uv pip install azure-identity
+- `openai`
+- `pillow`
+- optional `azure-identity` for live Entra-authenticated runs
+
+## Quick Start
+
+From the plugin root:
+
+```powershell
+python .\skills\azure-imagegen\scripts\image_gen.py generate `
+  --endpoint "https://example.openai.azure.com" `
+  --deployment "gpt-image-prod" `
+  --prompt "Minimal ceramic mug on a clean studio background" `
+  --dry-run
 ```
 
-Default env vars:
+That performs a zero-network configuration smoke test. For live calls, use your Azure endpoint and deployment or set:
 
 ```text
 AZURE_OPENAI_ENDPOINT
@@ -97,52 +155,37 @@ AZURE_OPENAI_DEPLOYMENT
 AZURE_OPENAI_API_KEY
 ```
 
-## Quick start from this repo
+For deeper CLI usage and prompt recipes, use the bundled skill references instead of this README:
 
-From the repo root:
+- [CLI reference](./skills/azure-imagegen/references/cli.md)
+- [Azure auth reference](./skills/azure-imagegen/references/azure-auth.md)
+- [Prompting guidance](./skills/azure-imagegen/references/prompting.md)
+- [Sample prompts](./skills/azure-imagegen/references/sample-prompts.md)
 
-```powershell
-$IMAGE_GEN = ".\skills\azure-imagegen\scripts\image_gen.py"
-python $IMAGE_GEN generate `
-  --endpoint "https://example.openai.azure.com" `
-  --deployment "gpt-image-prod" `
-  --prompt "Minimal ceramic mug on a clean studio background" `
-  --dry-run
+## Compatibility And Limitations
+
+- Azure-only: no direct non-Azure OpenAI endpoint support
+- v1-only: no classic `api-version` Azure endpoint mode
+- Image API only: no Responses API runtime path in this version
+- local Python environment required for the bundled CLI
+
+See [limitations](./skills/azure-imagegen/references/limitations.md) for the explicit boundary list.
+
+## Validation And Release
+
+Local validation:
+
+```bash
+python -m pip install -e ".[dev,entra]"
+pytest
 ```
 
-That performs a zero-network smoke test. For a real call, replace the example endpoint and deployment with your Azure values or set the default env vars first.
+If you have the Codex `skill-creator` tooling installed locally, you can also run:
 
-API-key live call:
-
-```powershell
-python $IMAGE_GEN generate `
-  --prompt "A cozy alpine cabin at dawn" `
-  --out ".\output\imagegen\cabin.png"
+```bash
+python ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/azure-imagegen
 ```
 
-Entra-authenticated live call:
+GitHub Actions runs packaging validation and dry-run smoke tests on pull requests, pushes to `main`, and version tags matching `v*`.
 
-```powershell
-python $IMAGE_GEN generate `
-  --auth-mode entra `
-  --prompt "A cozy alpine cabin at dawn"
-```
-
-If you want ephemeral dependency installs instead, the same live commands also work with `uv run --with openai --with pillow` and `uv run --with openai --with pillow --with azure-identity`.
-
-If you install the skill into Codex, the same bundled CLI lives at `skills/azure-imagegen/scripts/image_gen.py` inside the installed skill folder.
-
-## Layout
-
-```text
-skills/
-  azure-imagegen/
-    SKILL.md
-    agents/openai.yaml
-    scripts/image_gen.py
-    references/
-```
-
-## Current limitations
-
-See [skills/azure-imagegen/references/limitations.md](./skills/azure-imagegen/references/limitations.md).
+GitHub tags and release archives are the intended distribution format. Because the repository root is the plugin root, a checkout or release archive can be installed directly without an extra packaging step.

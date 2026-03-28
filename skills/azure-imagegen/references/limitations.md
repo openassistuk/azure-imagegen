@@ -22,5 +22,5 @@ This v1 skill is intentionally narrow.
 ## Practical implications
 
 - The CLI expects an Azure deployment name, not a raw model id.
-- The deployment should target a compatible image model such as `gpt-image-1.5`.
+- The deployment should target a compatible Azure OpenAI image model deployment.
 - If a team needs classic endpoint support or a Responses API runtime, add that as a later versioned extension instead of bolting it onto this v1 skill.

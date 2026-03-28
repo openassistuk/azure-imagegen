@@ -41,7 +41,7 @@ Generate or edit images with Azure OpenAI v1 by using the bundled CLI `scripts/i
 
 ## Defaults And Rules
 
-- Assume the deployment targets `gpt-image-1.5` unless the user says otherwise.
+- Resolve or ask for the Azure deployment name instead of inventing one.
 - Prefer the bundled CLI over ad hoc wrapper scripts.
 - Keep prompt augmentation short and structural; do not invent new creative requirements.
 - For edits, restate invariants every iteration.
@@ -98,29 +98,9 @@ Edit:
 
 ## Dependencies
 
-Install dependencies with `python -m pip`, or use `uv` if it is already part of the environment.
-
-```bash
-python -m pip install openai pillow
-```
-
-Optional `uv` form:
-
-```bash
-uv pip install openai pillow
-```
-
-For live Entra-authenticated calls:
-
-```bash
-python -m pip install azure-identity
-```
-
-Optional `uv` form:
-
-```bash
-uv pip install azure-identity
-```
+- Runtime dependencies: `openai` and `pillow`.
+- Add `azure-identity` only for live `--auth-mode entra` runs.
+- If the repo root is available, prefer its `pyproject.toml` for dependency installation. Otherwise install equivalent packages in the active Python environment.
 
 ## Reference Map
 

@@ -12,6 +12,7 @@ env/
 .ruff_cache/
 .mypy_cache/
 .cache/
+*.egg-info/
 
 .coverage
 .coverage.*

@@ -12,7 +12,7 @@ Real API calls require network access. `--dry-run` does not.
 
 ## Default configuration
 
-- Recommended deployed model: `gpt-image-1.5`
+- Deployment source: explicit `--deployment` or `AZURE_OPENAI_DEPLOYMENT`
 - Size: `1024x1024`
 - Quality: `high`
 - Output format: `png`
