@@ -35,6 +35,8 @@ ALLOWED_AUTH_MODES = {"api-key", "entra"}
 
 MAX_IMAGE_BYTES = 50 * 1024 * 1024
 MAX_BATCH_JOBS = 500
+GPT_IMAGE_2_MIN_PIXELS = 655_360
+GPT_IMAGE_2_MAX_PIXELS = 8_294_400
 
 
 @dataclass(frozen=True)
@@ -101,11 +103,51 @@ def _normalize_output_format(fmt: Optional[str]) -> str:
     return "jpeg" if fmt == "jpg" else fmt
 
 
-def _validate_size(size: str) -> None:
-    if size not in ALLOWED_SIZES:
-        _die(
-            "size must be one of 1024x1024, 1536x1024, or 1024x1536 for Azure image deployments."
+def _is_gpt_image_2_deployment(deployment: str) -> bool:
+    return "gpt-image-2" in deployment.lower()
+
+
+def _parse_size(size: str) -> Optional[Tuple[int, int]]:
+    match = re.fullmatch(r"(\d+)x(\d+)", size.lower())
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def _validate_size(size: Optional[str], *, deployment: str) -> None:
+    if not _is_gpt_image_2_deployment(deployment):
+        if size is not None and size not in ALLOWED_SIZES:
+            _die(
+                "size must be one of 1024x1024, 1536x1024, or 1024x1536 for Azure image deployments."
+            )
+        return
+
+    if size is None:
+        return
+
+    parsed = _parse_size(size)
+    if parsed is None:
+        _die("size must be WIDTHxHEIGHT or omitted for GPT-image-2 deployments.")
+
+    width, height = parsed
+    if width % 16 != 0 or height % 16 != 0:
+        _die("GPT-image-2 size dimensions must each be a multiple of 16.")
+
+    pixels = width * height
+    if pixels < GPT_IMAGE_2_MIN_PIXELS:
+        _die("GPT-image-2 size must be at least 655,360 total pixels.")
+    if pixels > GPT_IMAGE_2_MAX_PIXELS:
+        _warn(
+            "GPT-image-2 requested size exceeds 8,294,400 pixels; Azure may resize the final image to fit."
         )
+
+
+def _effective_size(size: Optional[str], *, deployment: str) -> Optional[str]:
+    if size is not None:
+        return size
+    if _is_gpt_image_2_deployment(deployment):
+        return None
+    return DEFAULT_SIZE
 
 
 def _validate_quality(quality: str) -> None:
@@ -127,10 +169,11 @@ def _validate_generate_payload(payload: Dict[str, Any]) -> None:
     n = int(payload.get("n", 1))
     if n < 1 or n > 10:
         _die("n must be between 1 and 10")
-    size = str(payload.get("size", DEFAULT_SIZE))
+    deployment = str(payload.get("model", ""))
+    size = payload.get("size")
     quality = str(payload.get("quality", DEFAULT_QUALITY))
     background = payload.get("background")
-    _validate_size(size)
+    _validate_size(str(size) if size is not None else None, deployment=deployment)
     _validate_quality(quality)
     _validate_background(background)
     oc = payload.get("output_compression")
@@ -633,7 +676,7 @@ async def _run_generate_batch(args: argparse.Namespace, config: AzureRuntimeConf
     base_payload = {
         "model": config.deployment,
         "n": args.n,
-        "size": args.size,
+        "size": _effective_size(args.size, deployment=config.deployment),
         "quality": args.quality,
         "background": args.background,
         "output_format": args.output_format,
@@ -777,7 +820,7 @@ def _generate(args: argparse.Namespace, config: AzureRuntimeConfig) -> None:
         "model": config.deployment,
         "prompt": prompt,
         "n": args.n,
-        "size": args.size,
+        "size": _effective_size(args.size, deployment=config.deployment),
         "quality": args.quality,
         "background": args.background,
         "output_format": args.output_format,
@@ -841,7 +884,7 @@ def _edit(args: argparse.Namespace, config: AzureRuntimeConfig) -> None:
         "model": config.deployment,
         "prompt": prompt,
         "n": args.n,
-        "size": args.size,
+        "size": _effective_size(args.size, deployment=config.deployment),
         "quality": args.quality,
         "background": args.background,
         "output_format": args.output_format,
@@ -964,7 +1007,7 @@ def _add_shared_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--prompt")
     parser.add_argument("--prompt-file")
     parser.add_argument("--n", type=int, default=1)
-    parser.add_argument("--size", default=DEFAULT_SIZE)
+    parser.add_argument("--size")
     parser.add_argument("--quality", default=DEFAULT_QUALITY)
     parser.add_argument("--background")
     parser.add_argument("--output-format")
@@ -1041,10 +1084,10 @@ def main() -> int:
     if not args.entra_scope.strip():
         _die("--entra-scope cannot be empty")
 
-    _validate_size(args.size)
+    config = _resolve_runtime_config(args)
+    _validate_size(args.size, deployment=config.deployment)
     _validate_quality(args.quality)
     _validate_background(args.background)
-    config = _resolve_runtime_config(args)
 
     args.func(args, config)
     return 0

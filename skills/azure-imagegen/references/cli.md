@@ -13,7 +13,7 @@ Real API calls require network access. `--dry-run` does not.
 ## Default configuration
 
 - Deployment source: explicit `--deployment` or `AZURE_OPENAI_DEPLOYMENT`
-- Size: `1024x1024`
+- Size: `1024x1024` for legacy deployments; omitted by default for deployments whose name contains `gpt-image-2`
 - Quality: `high`
 - Output format: `png`
 - Auth mode: `api-key`
@@ -79,6 +79,25 @@ uv run --with openai --with pillow python $IMAGE_GEN generate `
   --prompt "A cozy alpine cabin at dawn" `
   --size 1024x1024 `
   --out ".\output\imagegen\cabin.png"
+```
+
+GPT-image-2 automatic routing dry-run:
+
+```powershell
+python $IMAGE_GEN generate `
+  --deployment "gpt-image-2-prod" `
+  --prompt "A crisp ecommerce campaign image for a travel mug" `
+  --dry-run
+```
+
+GPT-image-2 explicit 4K dry-run:
+
+```powershell
+python $IMAGE_GEN generate `
+  --deployment "gpt-image-2-prod" `
+  --prompt "Wide cinematic product image for a homepage hero" `
+  --size 3840x2160 `
+  --dry-run
 ```
 
 Live call with Entra auth:
@@ -183,7 +202,11 @@ Supported per-job overrides:
 
 ## Notes
 
-- Supported sizes: `1024x1024`, `1536x1024`, `1024x1536`
+- Legacy supported sizes: `1024x1024`, `1536x1024`, `1024x1536`
+- GPT-image-2 is inferred from deployment names containing `gpt-image-2`.
+- GPT-image-2 supports omitted `--size` for Azure routing, 4K, `1024x1024`, `1536x1024`, `1024x1536`, and custom `WIDTHxHEIGHT` values aligned to multiples of 16.
+- GPT-image-2 explicit sizes must be at least 655,360 pixels. Requests over 8,294,400 pixels are allowed with a warning because Azure may resize the final image to fit.
+- Microsoft has announced legacy size tiers (`smimage`, `image`, `xlimage`) and token buckets (`16`, `24`, `36`, `48`, `64`, `96`), but this CLI does not expose flags for them until official Image API parameter names are published.
 - Transparent backgrounds require `--output-format png` or `webp`
 - `generate-batch` requires `--out-dir`
 - `--input-fidelity` is edit-only

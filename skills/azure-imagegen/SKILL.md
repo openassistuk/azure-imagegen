@@ -13,6 +13,7 @@ Generate or edit images with Azure OpenAI v1 by using the bundled CLI `scripts/i
 - Use the Image API only in v1.
 - Exclude classic Azure `api-version` endpoints.
 - Exclude a Responses API runtime path in v1.
+- Infer GPT-image-2 behavior when the Azure deployment name contains `gpt-image-2`.
 
 ## Workflow
 
@@ -47,6 +48,10 @@ Generate or edit images with Azure OpenAI v1 by using the bundled CLI `scripts/i
 - For edits, restate invariants every iteration.
 - Use `quality=high` for text-heavy or detail-critical outputs.
 - Use `input_fidelity=high` for identity-preserving or layout-sensitive edits.
+- For GPT-image-2 deployments, omit `--size` unless the user asks for an explicit resolution; Azure can route automatically when size is not set.
+- GPT-image-2 explicit sizes must use `WIDTHxHEIGHT` with dimensions aligned to multiples of 16 and at least 655,360 total pixels.
+- GPT-image-2 requests above 8,294,400 pixels are allowed, but Azure may resize the final image to fit.
+- Do not invent `smimage`, `image`, `xlimage`, or token-bucket CLI flags until Microsoft publishes official Image API parameter names.
 
 ## Prompt Augmentation
 

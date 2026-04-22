@@ -7,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 
@@ -32,6 +33,20 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
 
 def _write_png(path: Path) -> None:
     path.write_bytes(ONE_PIXEL_PNG)
+
+
+def _run_generate(deployment: str, *args: str) -> subprocess.CompletedProcess[str]:
+    return _run_cli(
+        "generate",
+        "--endpoint",
+        "https://example.openai.azure.com",
+        "--deployment",
+        deployment,
+        "--prompt",
+        "smoke test",
+        *args,
+        "--dry-run",
+    )
 
 
 def _load_skill_frontmatter() -> dict:
@@ -149,3 +164,51 @@ def test_generate_batch_dry_run_does_not_create_output_dir(tmp_path: Path) -> No
     payload = json.loads(result.stdout)
     assert payload["endpoint"] == "/images/generations"
     assert payload["outputs"] == [str(out_dir / "001-batch-smoke-test.png")]
+
+
+def test_gpt_image_2_omits_default_size_for_routing() -> None:
+    result = _run_generate("gpt-image-2-prod")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["model"] == "gpt-image-2-prod"
+    assert "size" not in payload
+
+
+@pytest.mark.parametrize("size", ["3840x2160", "2160x3840", "1280x720"])
+def test_gpt_image_2_accepts_4k_and_custom_aligned_sizes(size: str) -> None:
+    result = _run_generate("gpt-image-2-prod", "--size", size)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["size"] == size
+
+
+def test_gpt_image_2_rejects_too_small_size() -> None:
+    result = _run_generate("gpt-image-2-prod", "--size", "800x800")
+
+    assert result.returncode == 1
+    assert "at least 655,360" in result.stderr
+
+
+def test_gpt_image_2_rejects_unaligned_size() -> None:
+    result = _run_generate("gpt-image-2-prod", "--size", "1025x1024")
+
+    assert result.returncode == 1
+    assert "multiple of 16" in result.stderr
+
+
+def test_gpt_image_2_allows_over_budget_size_with_warning() -> None:
+    result = _run_generate("gpt-image-2-prod", "--size", "3840x3840")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["size"] == "3840x3840"
+    assert "Azure may resize the final image to fit" in result.stderr
+
+
+def test_legacy_deployment_still_rejects_gpt_image_2_custom_size() -> None:
+    result = _run_generate("gpt-image-prod", "--size", "3840x2160")
+
+    assert result.returncode == 1
+    assert "size must be one of" in result.stderr
