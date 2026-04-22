@@ -30,6 +30,7 @@ Generate or edit images with Azure OpenAI v1 by using the bundled CLI `scripts/i
 
 - If the user provides one or more input images, or asks to retouch, inpaint, mask, localize text, replace a background, or "change only X", use `edit`.
 - If the user needs many prompts or many assets in one run, use `generate-batch`.
+- If the user has a GPT-image-2 result on a flat key-color background and needs a transparent PNG, use `postprocess-transparent`.
 - Otherwise use `generate`.
 
 ## Authentication
@@ -51,6 +52,8 @@ Generate or edit images with Azure OpenAI v1 by using the bundled CLI `scripts/i
 - For GPT-image-2 deployments, omit `--size` unless the user asks for an explicit resolution; Azure can route automatically when size is not set.
 - GPT-image-2 explicit sizes must use `WIDTHxHEIGHT` with dimensions aligned to multiples of 16 and at least 655,360 total pixels.
 - GPT-image-2 requests above 8,294,400 pixels are allowed, but Azure may resize the final image to fit.
+- GPT-image-2 does not support native `background=transparent`; use GPT-image-1/1.5 for native transparency, or generate on a flat key color and run `postprocess-transparent`.
+- For GPT-image-2 key-color cutouts, request a pure flat background such as `#00FF00` or `#FF00FF`, no shadows, no reflections, crisp edges, and no use of the key color in the subject.
 - Do not invent `smimage`, `image`, `xlimage`, or token-bucket CLI flags until Microsoft publishes official Image API parameter names.
 
 ## Prompt Augmentation
@@ -105,6 +108,8 @@ Edit:
 
 - Runtime dependencies: `openai` and `pillow`.
 - Add `azure-identity` only for live `--auth-mode entra` runs.
+- Add ImageMagick only when using local `postprocess-transparent`; it shells out to `magick` on PATH.
+- Do not require `rembg`; mention it only as an optional semantic background-removal tool for hair, glass, soft edges, or non-flat backgrounds.
 - If the repo root is available, prefer its `pyproject.toml` for dependency installation. Otherwise install equivalent packages in the active Python environment.
 
 ## Reference Map

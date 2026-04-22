@@ -8,6 +8,8 @@ import asyncio
 import base64
 import json
 import os
+import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 import re
@@ -22,6 +24,7 @@ DEFAULT_QUALITY = "high"
 DEFAULT_OUTPUT_FORMAT = "png"
 DEFAULT_CONCURRENCY = 5
 DEFAULT_DOWNSCALE_SUFFIX = "-web"
+DEFAULT_TRANSPARENT_FUZZ = 6.0
 
 DEFAULT_ENDPOINT_ENV = "AZURE_OPENAI_ENDPOINT"
 DEFAULT_DEPLOYMENT_ENV = "AZURE_OPENAI_DEPLOYMENT"
@@ -160,7 +163,18 @@ def _validate_background(background: Optional[str]) -> None:
         _die("background must be one of transparent, opaque, or auto.")
 
 
-def _validate_transparency(background: Optional[str], output_format: str) -> None:
+def _validate_transparency(
+    background: Optional[str],
+    output_format: str,
+    *,
+    deployment: str,
+) -> None:
+    if background == "transparent" and _is_gpt_image_2_deployment(deployment):
+        _die(
+            "GPT-image-2 does not support background=transparent. Use a GPT-image-1/1.5 "
+            "deployment for native transparent output, or generate on a flat key color "
+            "and run postprocess-transparent."
+        )
     if background == "transparent" and output_format not in {"png", "webp"}:
         _die("transparent background requires output-format png or webp.")
 
@@ -351,6 +365,81 @@ def _decode_write_and_downscale(
         resized = _downscale_image_bytes(raw, max_dim=downscale_max_dim, output_format=output_format)
         derived.write_bytes(resized)
         print(f"Wrote {derived}")
+
+
+def _format_fuzz(fuzz: float) -> str:
+    return f"{fuzz:g}%"
+
+
+def _magick_transparent_command(
+    *,
+    magick_bin: str,
+    input_path: Path,
+    output_path: Path,
+    key_color: str,
+    fuzz: float,
+    trim: bool,
+) -> List[str]:
+    command = [
+        magick_bin,
+        str(input_path),
+        "-alpha",
+        "set",
+        "-fuzz",
+        _format_fuzz(fuzz),
+        "-transparent",
+        key_color,
+    ]
+    if trim:
+        command.extend(["-trim", "+repage"])
+    command.append(str(output_path))
+    return command
+
+
+def _postprocess_transparent(args: argparse.Namespace) -> None:
+    input_path = Path(args.input)
+    output_path = Path(args.out)
+    key_color = args.key_color.strip()
+    fuzz = float(args.fuzz)
+
+    if not input_path.exists():
+        _die(f"Input image not found: {input_path}")
+    if output_path.suffix.lower() != ".png":
+        _die("postprocess-transparent output must be a PNG file.")
+    if output_path.exists() and not args.force and not args.dry_run:
+        _die(f"Output already exists: {output_path} (use --force to overwrite)")
+    if not key_color:
+        _die("--key-color cannot be empty")
+    if fuzz < 0 or fuzz > 100:
+        _die("--fuzz must be between 0 and 100")
+
+    magick_bin = shutil.which("magick")
+    if magick_bin is None:
+        if args.dry_run:
+            magick_bin = "magick"
+        else:
+            _die("ImageMagick `magick` was not found on PATH. Install ImageMagick or add it to PATH.")
+
+    command = _magick_transparent_command(
+        magick_bin=magick_bin,
+        input_path=input_path,
+        output_path=output_path,
+        key_color=key_color,
+        fuzz=fuzz,
+        trim=args.trim,
+    )
+
+    preview = {"command": command, "output": str(output_path)}
+    if args.dry_run:
+        _print_request(preview)
+        return
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError as exc:
+        _die(f"ImageMagick failed with exit code {exc.returncode}.")
+    print(f"Wrote {output_path}")
 
 
 def _normalize_base_url(endpoint: str) -> str:
@@ -699,7 +788,11 @@ async def _run_generate_batch(args: argparse.Namespace, config: AzureRuntimeConf
 
             _validate_generate_payload(job_payload)
             effective_output_format = _normalize_output_format(job_payload.get("output_format"))
-            _validate_transparency(job_payload.get("background"), effective_output_format)
+            _validate_transparency(
+                job_payload.get("background"),
+                effective_output_format,
+                deployment=str(job_payload.get("model", config.deployment)),
+            )
             if "output_format" in job_payload:
                 job_payload["output_format"] = effective_output_format
 
@@ -752,7 +845,11 @@ async def _run_generate_batch(args: argparse.Namespace, config: AzureRuntimeConf
         n = int(payload.get("n", 1))
         _validate_generate_payload(payload)
         effective_output_format = _normalize_output_format(payload.get("output_format"))
-        _validate_transparency(payload.get("background"), effective_output_format)
+        _validate_transparency(
+            payload.get("background"),
+            effective_output_format,
+            deployment=str(payload.get("model", config.deployment)),
+        )
         if "output_format" in payload:
             payload["output_format"] = effective_output_format
         outputs = _job_output_paths(
@@ -830,7 +927,7 @@ def _generate(args: argparse.Namespace, config: AzureRuntimeConfig) -> None:
     payload = {k: v for k, v in payload.items() if v is not None}
 
     output_format = _normalize_output_format(args.output_format)
-    _validate_transparency(args.background, output_format)
+    _validate_transparency(args.background, output_format, deployment=config.deployment)
     if "output_format" in payload:
         payload["output_format"] = output_format
     output_paths = _build_output_paths(
@@ -895,7 +992,7 @@ def _edit(args: argparse.Namespace, config: AzureRuntimeConfig) -> None:
     payload = {k: v for k, v in payload.items() if v is not None}
 
     output_format = _normalize_output_format(args.output_format)
-    _validate_transparency(args.background, output_format)
+    _validate_transparency(args.background, output_format, deployment=config.deployment)
     if "output_format" in payload:
         payload["output_format"] = output_format
     output_paths = _build_output_paths(
@@ -1068,7 +1165,24 @@ def main() -> int:
     edit_parser.add_argument("--input-fidelity")
     edit_parser.set_defaults(func=_edit)
 
+    post_parser = subparsers.add_parser(
+        "postprocess-transparent",
+        help="Remove a flat key color with ImageMagick to create a transparent PNG",
+    )
+    post_parser.add_argument("--input", required=True)
+    post_parser.add_argument("--out", required=True)
+    post_parser.add_argument("--key-color", required=True)
+    post_parser.add_argument("--fuzz", type=float, default=DEFAULT_TRANSPARENT_FUZZ)
+    post_parser.add_argument("--trim", action="store_true")
+    post_parser.add_argument("--force", action="store_true")
+    post_parser.add_argument("--dry-run", action="store_true")
+    post_parser.set_defaults(func=_postprocess_transparent)
+
     args = parser.parse_args()
+    if args.command == "postprocess-transparent":
+        args.func(args)
+        return 0
+
     if args.n < 1 or args.n > 10:
         _die("--n must be between 1 and 10")
     if getattr(args, "concurrency", 1) < 1 or getattr(args, "concurrency", 1) > 25:

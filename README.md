@@ -134,6 +134,7 @@ The runtime dependency set is:
 - `openai`
 - `pillow`
 - optional `azure-identity` for live Entra-authenticated runs
+- optional ImageMagick `magick` CLI for local transparent-background post-processing
 
 ## Quick Start
 
@@ -170,6 +171,18 @@ This plugin supports Microsoft Foundry GPT-image-2 deployments through the same 
 - Pass explicit sizes such as `3840x2160`, `2160x3840`, `1024x1024`, `1536x1024`, `1024x1536`, or another `WIDTHxHEIGHT` value with both dimensions aligned to multiples of 16.
 - Explicit GPT-image-2 sizes must be at least 655,360 pixels. Requests over 8,294,400 pixels are allowed with a warning because Azure may resize the final output.
 - The Microsoft announcement names legacy size tiers and token buckets, but this plugin does not expose guessed flags for them until Microsoft publishes official Image API parameter names.
+- GPT-image-2 does not support native `background=transparent`. Generate on a flat key color such as `#00FF00` and run `postprocess-transparent` with ImageMagick, or use a GPT-image-1/1.5 deployment for native transparent PNG output.
+
+Example GPT-image-2 cutout post-process:
+
+```powershell
+python .\skills\azure-imagegen\scripts\image_gen.py postprocess-transparent `
+  --input ".\output\imagegen\product-keyed.png" `
+  --out ".\output\imagegen\product-transparent.png" `
+  --key-color "#00FF00" `
+  --fuzz 6 `
+  --trim
+```
 
 ## Compatibility And Limitations
 

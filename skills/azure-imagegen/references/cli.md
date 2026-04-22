@@ -7,6 +7,7 @@ Keep `SKILL.md` overview-first. Put verbose command details here.
 - `generate`: create a new image from a prompt
 - `edit`: edit one or more existing images, optionally with a mask
 - `generate-batch`: run many prompt jobs from a JSONL file
+- `postprocess-transparent`: remove a flat key color with ImageMagick to create a transparent PNG
 
 Real API calls require network access. `--dry-run` does not.
 
@@ -183,6 +184,27 @@ python $IMAGE_GEN edit `
   --dry-run
 ```
 
+Create a transparent PNG from a GPT-image-2 key-color result:
+
+```powershell
+python $IMAGE_GEN postprocess-transparent `
+  --input ".\output\imagegen\product-keyed.png" `
+  --out ".\output\imagegen\product-transparent.png" `
+  --key-color "#00FF00" `
+  --fuzz 6 `
+  --trim
+```
+
+Preview the ImageMagick command without writing output:
+
+```powershell
+python $IMAGE_GEN postprocess-transparent `
+  --input ".\output\imagegen\product-keyed.png" `
+  --out ".\output\imagegen\product-transparent.png" `
+  --key-color "#00FF00" `
+  --dry-run
+```
+
 ## Batch JSONL shape
 
 Each line can be:
@@ -207,7 +229,10 @@ Supported per-job overrides:
 - GPT-image-2 supports omitted `--size` for Azure routing, 4K, `1024x1024`, `1536x1024`, `1024x1536`, and custom `WIDTHxHEIGHT` values aligned to multiples of 16.
 - GPT-image-2 explicit sizes must be at least 655,360 pixels. Requests over 8,294,400 pixels are allowed with a warning because Azure may resize the final image to fit.
 - Microsoft has announced legacy size tiers (`smimage`, `image`, `xlimage`) and token buckets (`16`, `24`, `36`, `48`, `64`, `96`), but this CLI does not expose flags for them until official Image API parameter names are published.
-- Transparent backgrounds require `--output-format png` or `webp`
+- Transparent backgrounds require `--output-format png` or `webp` and are not supported by GPT-image-2.
+- For GPT-image-2 transparent assets, generate on a pure flat key color such as `#00FF00` or `#FF00FF`, then run `postprocess-transparent`.
+- `postprocess-transparent` requires ImageMagick `magick` on PATH and PNG output. It is color-based, not semantic segmentation.
+- `rembg` can be useful for hair, glass, soft edges, or non-flat backgrounds, but it is not bundled or required.
 - `generate-batch` requires `--out-dir`
 - `--input-fidelity` is edit-only
 

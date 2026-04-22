@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import subprocess
 import sys
@@ -28,6 +29,17 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
         check=False,
+    )
+
+
+def _run_cli_with_env(*args: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT_PATH), *args],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
     )
 
 
@@ -90,6 +102,7 @@ def test_generate_help_smoke() -> None:
     assert result.returncode == 0
     assert "generate-batch" in result.stdout
     assert "edit" in result.stdout
+    assert "postprocess-transparent" in result.stdout
 
 
 def test_generate_dry_run_does_not_create_output_dir(tmp_path: Path) -> None:
@@ -212,3 +225,100 @@ def test_legacy_deployment_still_rejects_gpt_image_2_custom_size() -> None:
 
     assert result.returncode == 1
     assert "size must be one of" in result.stderr
+
+
+def test_gpt_image_2_rejects_transparent_background() -> None:
+    result = _run_generate(
+        "gpt-image-2-prod",
+        "--background",
+        "transparent",
+        "--output-format",
+        "png",
+    )
+
+    assert result.returncode == 1
+    assert "GPT-image-2 does not support background=transparent" in result.stderr
+    assert "postprocess-transparent" in result.stderr
+
+
+def test_legacy_deployment_accepts_transparent_background() -> None:
+    result = _run_generate(
+        "gpt-image-prod",
+        "--background",
+        "transparent",
+        "--output-format",
+        "png",
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["background"] == "transparent"
+    assert payload["output_format"] == "png"
+
+
+def test_postprocess_transparent_dry_run_prints_magick_command(tmp_path: Path) -> None:
+    image_path = tmp_path / "keyed.png"
+    out_path = tmp_path / "transparent.png"
+    _write_png(image_path)
+
+    result = _run_cli(
+        "postprocess-transparent",
+        "--input",
+        str(image_path),
+        "--out",
+        str(out_path),
+        "--key-color",
+        "#00FF00",
+        "--trim",
+        "--dry-run",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not out_path.exists()
+    payload = json.loads(result.stdout)
+    command = payload["command"]
+    assert Path(command[0]).name.lower().startswith("magick")
+    assert "-transparent" in command
+    assert "#00FF00" in command
+    assert "-trim" in command
+    assert "+repage" in command
+
+
+def test_postprocess_transparent_missing_magick_is_clear(tmp_path: Path) -> None:
+    image_path = tmp_path / "keyed.png"
+    out_path = tmp_path / "transparent.png"
+    _write_png(image_path)
+    env = {**os.environ, "PATH": ""}
+
+    result = _run_cli_with_env(
+        "postprocess-transparent",
+        "--input",
+        str(image_path),
+        "--out",
+        str(out_path),
+        "--key-color",
+        "#00FF00",
+        env=env,
+    )
+
+    assert result.returncode == 1
+    assert "ImageMagick `magick` was not found on PATH" in result.stderr
+
+
+def test_postprocess_transparent_requires_png_output(tmp_path: Path) -> None:
+    image_path = tmp_path / "keyed.png"
+    _write_png(image_path)
+
+    result = _run_cli(
+        "postprocess-transparent",
+        "--input",
+        str(image_path),
+        "--out",
+        str(tmp_path / "transparent.jpg"),
+        "--key-color",
+        "#00FF00",
+        "--dry-run",
+    )
+
+    assert result.returncode == 1
+    assert "output must be a PNG" in result.stderr

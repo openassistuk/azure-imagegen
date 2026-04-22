@@ -112,6 +112,15 @@ Primary request: extract the product on a transparent background
 Constraints: crisp silhouette, no halos or fringing; preserve label text exactly; no restyling
 ```
 
+### gpt-image-2-key-color-cutout
+
+```text
+Use case: background-extraction
+Primary request: create the product as an isolated cutout on a flat pure #00FF00 background
+Constraints: no shadows, no reflections, no gradients, no green in the product, crisp silhouette, centered subject, preserve label text exactly
+Output intent: run postprocess-transparent with key color #00FF00 to create a transparent PNG
+```
+
 ### compositing
 
 ```text
